@@ -1,0 +1,6 @@
+.build/
+JugeCore/.build/
+*.xcodeproj
+App/Info.plist
+.swiftpm/
+DerivedData/

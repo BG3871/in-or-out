@@ -1,0 +1,24 @@
+# Vérifie à chaque envoi que l'appli compile (Mac de GitHub, sans signature ni clé Apple).
+name: Compilation iOS
+on:
+  push:
+  pull_request:
+jobs:
+  compilation:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Choisir le Xcode le plus récent
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -v beta | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Générer le projet Xcode
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Compiler pour iPhone (sans signature)
+        run: |
+          xcodebuild build -project JugeDeLigne.xcodeproj -scheme JugeDeLigne -configuration Release \
+            -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
