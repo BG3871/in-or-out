@@ -33,10 +33,10 @@ final class Moteur: ObservableObject {
     @Published private(set) var imagesParSeconde: Double = 0
     @Published private(set) var compte = (bonnes: 0, fautes: 0, douteuses: 0)
 
-    let camera = Camera()
+    nonisolated(unsafe) let camera = Camera()
     let journal: Journal
     private let annonce = Annonce()
-    private let extraits = Extraits()
+    nonisolated(unsafe) private let extraits = Extraits()
 
     // état de la file d'analyse (accédé seulement depuis camera.fileAnalyse)
     nonisolated(unsafe) private var detecteur: DetecteurBalle?
@@ -93,7 +93,7 @@ final class Moteur: ObservableObject {
         etape = .recherche
         // 5 images espacées de 0,2 s, dont on prend la médiane (les joueurs et balles disparaissent)
         collecterFonds(5, intervalle: 0.2) { [weak self] fonds in
-            let g = Plan8.mediane(fonds.map(\.0)), s = Plan8.mediane(fonds.map(\.1))
+            let g = Plan8.mediane(fonds.map { $0.0 }), s = Plan8.mediane(fonds.map { $0.1 })
             let r = Calibrage.reperer(gris: g, sat: s, proche: (Double(p.x), Double(p.y)),
                                       lointain: (Double(l.x), Double(l.y)), coteFaute: cote)
             Task { @MainActor in
@@ -236,14 +236,14 @@ final class Moteur: ObservableObject {
             case .faute: self.compte.fautes += 1
             case .douteuse: self.compte.douteuses += 1
             }
-            var e = Entree(date: Date(), source: "Direct", tVideo: tSeance, appel: a, extrait: nil, annotation: nil)
-            if garder { e.extrait = nom + ".mov" }
+            let e = Entree(date: Date(), source: "Direct", tVideo: tSeance, appel: a, extrait: garder ? nom + ".mov" : nil, annotation: nil)
+            let id = e.id
             self.journal.ajouter(e)
             if garder {
                 self.extraits.garder(autour: a.t, nom: nom) { url in
                     if url == nil {
                         Task { @MainActor in
-                            if var e2 = self.journal.entrees.first(where: { $0.id == e.id }) { e2.extrait = nil; self.journal.mettreAJour(e2) }
+                            if var e2 = self.journal.entrees.first(where: { $0.id == id }) { e2.extrait = nil; self.journal.mettreAJour(e2) }
                         }
                     }
                 }

@@ -66,8 +66,8 @@ final class Rejeu: ObservableObject {
                 let t = 5 + (d - 10) * Double(k) / 6
                 let (img, _) = try await gen.image(at: CMTime(seconds: max(0, t), preferredTimescale: 600))
                 if apercu == nil { apercu = img }
-                guard let (g, s) = Rejeu.plans(img) else { continue }
-                gs.append(g); ss.append(s)
+                guard let pl = Rejeu.plans(img) else { continue }
+                gs.append(pl.0); ss.append(pl.1)
             }
             guard !gs.isEmpty, gs[0].largeur == 1080, gs[0].hauteur == 1920 else {
                 throw NSError(domain: "rejeu", code: 2, userInfo: [NSLocalizedDescriptionKey: "Il faut une vidéo 1080 × 1920 (ralenti 240 i/s)."])
@@ -108,8 +108,9 @@ final class Rejeu: ObservableObject {
     }
 
     func choisirCote(_ c: CoteFaute) {
-        guard let (g, s) = plans, let p = proche, let l = lointain else { return }
-        switch Calibrage.reperer(gris: g, sat: s, proche: (p.x, p.y), lointain: (l.x, l.y), coteFaute: c) {
+        guard let pl = plans, let p = proche, let l = lointain else { return }
+        switch Calibrage.reperer(gris: pl.0, sat: pl.1, proche: (Double(p.x), Double(p.y)),
+                                 lointain: (Double(l.x), Double(l.y)), coteFaute: c) {
         case .ok(let lg, let q): ligne = lg; etape = .pret(q)
         case .echec(let m): etape = .echec(m)
         }
