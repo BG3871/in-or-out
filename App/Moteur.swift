@@ -42,7 +42,7 @@ final class Moteur: ObservableObject {
 
     nonisolated(unsafe) let camera = Camera()
     let journal: Journal
-    private let annonce = Annonce()
+    let annonce = Annonce()
     nonisolated(unsafe) private let extraits = Extraits()
 
     // état de la file d'analyse (accédé seulement depuis camera.fileAnalyse)

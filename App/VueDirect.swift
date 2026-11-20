@@ -1,6 +1,7 @@
 import AVFoundation
 import JugeCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Aperçu de la caméra, en portrait, sans recadrage (l'image 1080 × 1920 tient entière à l'écran).
 struct Apercu: UIViewRepresentable {
@@ -150,6 +151,7 @@ struct VueDirect: View {
                     Slider(value: $moteur.dureeFlash, in: 0.5...3, step: 0.5)
                     Button("Essai") { moteur.essaiFlash() }.accessibilityHint("Allume la lampe et joue l’annonce « Faute ! »").buttonStyle(.bordered).tint(.white)
                 }
+                ReglageAnnonce(annonce: moteur.annonce)
                 Button("Calibrer et commencer") { moteur.calibrerEtCommencer() }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                 if case .reglage = moteur.etape {} else {
@@ -172,6 +174,31 @@ struct VueDirect: View {
             Button("Annuler") { moteur.annulerDecompte() }.buttonStyle(.bordered).tint(.white)
         default:
             EmptyView()
+        }
+    }
+}
+
+/// Choix du son de l'annonce : ta voix enregistrée, un fichier importé, ou la voix de l'iPhone.
+struct ReglageAnnonce: View {
+    @ObservedObject var annonce: Annonce
+    @State private var importer = false
+    @State private var message: String?
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text("Annonce : \(annonce.enregistrement ? "parle maintenant, crie « Faute ! »…" : annonce.source)")
+                .font(.footnote).foregroundStyle(annonce.enregistrement ? .yellow : .white)
+            HStack {
+                Button("Enregistrer mon « Faute ! »") { Task { message = await annonce.enregistrer() } }
+                    .disabled(annonce.enregistrement)
+                Button("Importer") { importer = true }
+                if annonce.source != "voix de l'iPhone" { Button("Voix iPhone") { annonce.revenirALaVoix() } }
+            }
+            .buttonStyle(.bordered).tint(.white).font(.footnote)
+            if let message { Text(message).font(.caption).foregroundStyle(.orange) }
+        }
+        .fileImporter(isPresented: $importer, allowedContentTypes: [.audio]) { r in
+            if case .success(let url) = r { message = annonce.importer(url) }
         }
     }
 }

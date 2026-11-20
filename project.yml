@@ -43,3 +43,4 @@ targets:
         UIStatusBarHidden: true
         NSCameraUsageDescription: "La caméra filme la ligne au ralenti pour juger si la balle est bonne ou faute."
         NSPhotoLibraryUsageDescription: "Pour rejouer une vidéo au ralenti déjà filmée."
+        NSMicrophoneUsageDescription: "Pour enregistrer ta propre annonce « Faute ! »."

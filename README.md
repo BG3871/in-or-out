@@ -30,7 +30,8 @@ ramassées sont ignorés, comme dans le script.
    - **Silencieux** (par défaut) : l'appli note ses verdicts sans signal. À utiliser tant que la concordance
      avec tes annotations n'est pas jugée suffisante.
    - **Arbitre** : flash (1,5 s par défaut, réglable de 0,5 à 3 s, bouton « Essai ») et « Faute ! » sur les fautes nettes.
-     Le son suit la sortie audio de l'iPhone : une enceinte Bluetooth connectée le reçoit.
+     Le son suit la sortie audio de l'iPhone : une enceinte Bluetooth connectée le reçoit. L'annonce peut être ta propre
+     voix (« Enregistrer mon Faute ! » : silences coupés, volume au maximum), un fichier audio importé, ou la voix de l'iPhone.
    - Toutes les 3 s, l'appli vérifie que la ligne n'a pas bougé. Si le téléphone a bougé (plus de 4 px),
      elle s'arrête et demande de recalibrer.
 2. **Rejeu** : choisir une vidéo au ralenti déjà filmée (IMG_1299, IMG_1323…). Même détecteur et même juge que le direct.
