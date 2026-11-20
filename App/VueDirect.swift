@@ -148,7 +148,7 @@ struct VueDirect: View {
                 HStack {
                     Text(String(format: "Flash : %.1f s", moteur.dureeFlash)).foregroundStyle(.white).font(.footnote)
                     Slider(value: $moteur.dureeFlash, in: 0.5...3, step: 0.5)
-                    Button("Essai") { moteur.essaiFlash() }.buttonStyle(.bordered).tint(.white)
+                    Button("Essai") { moteur.essaiFlash() }.accessibilityHint("Allume la lampe et joue l’annonce « Faute ! »").buttonStyle(.bordered).tint(.white)
                 }
                 Button("Calibrer et commencer") { moteur.calibrerEtCommencer() }
                     .buttonStyle(.borderedProminent).controlSize(.large)

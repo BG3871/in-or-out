@@ -177,7 +177,7 @@ final class Moteur: ObservableObject {
     }
 
     /// Essai de la lampe depuis l'écran de réglage.
-    func essaiFlash() { camera.flash(duree: dureeFlash) }
+    func essaiFlash() { camera.flash(duree: dureeFlash); annonce.faute() }
 
     // MARK: - file d'analyse
 
