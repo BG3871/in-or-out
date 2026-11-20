@@ -143,6 +143,77 @@ public enum Calibrage {
         return .ok(LigneAxe(gauche: pl, droite: pr, y0: Int(s0), y1: Int(s1), coteFaute: coteFaute), qualite: qualite)
     }
 
+    /// Repérage automatique, sans toucher l'écran, comme find_axis_line() de juge_ligne.py :
+    /// la ligne la plus longue à moins de 40° de la verticale dans la moitié basse de l'image.
+    /// Échec si une autre ligne fuyante presque aussi longue est ailleurs (ambiguïté).
+    public static func detecter(gris: Plan8, sat: Plan8, coteFaute: CoteFaute) -> ResultatCalibrage {
+        let W = gris.largeur, H = gris.hauteur
+        let m = masqueBlanc(gris: gris, sat: sat, xMin: 0, xMax: W - 1, yMin: H / 2, yMax: H - 1)
+        // Transformée de Hough : x = x0 + tan(θ)·(y − yRef), θ de −40° à +40° par pas de 0,5°
+        let yRef = Double(H * 3 / 4)
+        let angles = stride(from: -40.0, through: 40.0, by: 0.5).map { tan($0 * .pi / 180) }
+        let xMinBin = -W, nBins = 3 * W
+        var acc = [Int32](repeating: 0, count: angles.count * nBins)
+        for y in (H / 2)..<H {
+            let dy = Double(y) - yRef
+            for x in 0..<W where m[y * W + x] != 0 {
+                for (a, t) in angles.enumerated() {
+                    let b = Int((Double(x) - t * dy).rounded()) - xMinBin
+                    if b >= 0 && b < nBins { acc[a * nBins + b] += 1 }
+                }
+            }
+        }
+        // meilleurs pics, en écartant les voisins d'un pic déjà retenu
+        var pics: [(a: Int, b: Int)] = []
+        let ordre = acc.indices.filter { acc[$0] >= 80 }.sorted { acc[$0] > acc[$1] }
+        for i in ordre {
+            let a = i / nBins, b = i % nBins
+            if pics.contains(where: { abs($0.a - a) <= 4 && abs($0.b - b) <= 6 }) { continue }
+            pics.append((a, b))
+            if pics.count >= 40 { break }
+        }
+        // segment le plus long le long de chaque pic (trous ≤ 10 lignes, ±1 px)
+        struct Segment { var longueur: Double; var x1: Double, y1: Double, x2: Double, y2: Double }
+        var segments: [Segment] = []
+        for p in pics {
+            let t = angles[p.a], x0 = Double(p.b + xMinBin)
+            var debut: (Double, Double)?, dernier: (Double, Double)?, dernierY = -100
+            var meilleur: Segment?
+            func clore() {
+                if let d = debut, let f = dernier {
+                    let l = hypot(f.0 - d.0, f.1 - d.1)
+                    if l >= 120 && l > (meilleur?.longueur ?? 0) { meilleur = Segment(longueur: l, x1: f.0, y1: f.1, x2: d.0, y2: d.1) }
+                }
+                debut = nil; dernier = nil
+            }
+            for y in (H / 2)..<H {
+                let x = x0 + t * (Double(y) - yRef)
+                let xi = Int(x.rounded())
+                guard xi >= 1 && xi < W - 1 else { continue }
+                let o = y * W + xi
+                guard m[o] != 0 || m[o - 1] != 0 || m[o + 1] != 0 else { continue }
+                if y - dernierY > 10 { clore() }
+                if debut == nil { debut = (x, Double(y)) }
+                dernier = (x, Double(y)); dernierY = y
+            }
+            clore()
+            if let s = meilleur { segments.append(s) }
+        }
+        guard let L = segments.max(by: { $0.longueur < $1.longueur }) else {
+            return .echec("aucune ligne fuyante trouvée dans la moitié basse de l'image")
+        }
+        // ambiguïté : autre ligne fuyante presque aussi longue, à plus de 40 px de la première, et qui
+        // descend aussi près du téléphone (la ligne dans l'axe est celle qui arrive au pied du téléphone ;
+        // une ligne d'un court voisin s'arrête plus haut dans l'image)
+        for s in segments where s.longueur > 0.7 * L.longueur && s.y1 >= L.y1 - 60 {
+            let ym = (s.y1 + s.y2) / 2, xm = (s.x1 + s.x2) / 2
+            let xl = L.x2 + (L.x1 - L.x2) * (ym - L.y2) / (L.y1 - L.y2)
+            if abs(xm - xl) > 40 { return .echec("deux lignes fuyantes candidates") }
+        }
+        // (x1, y1) = bout proche (bas)
+        return reperer(gris: gris, sat: sat, proche: (L.x1, L.y1), lointain: (L.x2, L.y2), coteFaute: coteFaute)
+    }
+
     /// Le téléphone a-t-il bougé ? Décalage (px) du bord gauche au milieu de la ligne, nil si la ligne
     /// n'est plus retrouvée. Le script s'arrête au-delà de 4 px.
     public static func decalage(_ ligne: LigneAxe, gris: Plan8, sat: Plan8) -> Double? {

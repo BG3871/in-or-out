@@ -86,7 +86,7 @@ final class Camera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     /// Lampe arrière allumée pendant `duree` secondes.
-    func flash(duree: Double = 0.4) {
+    func flash(duree: Double = 1.5) {
         fileConfig.async {
             guard let dev = self.device, dev.hasTorch, (try? dev.lockForConfiguration()) != nil else { return }
             try? dev.setTorchModeOn(level: AVCaptureDevice.maxAvailableTorchLevel)

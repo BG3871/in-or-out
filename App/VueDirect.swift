@@ -88,15 +88,17 @@ struct VueDirect: View {
         switch moteur.etape {
         case .demarrage: return "Démarrage de la caméra…"
         case .erreur(let m): return m
-        case .pointProche: return "Pose le téléphone au bout de la ligne, bien calé. Touche le bout PROCHE de la ligne."
+        case .reglage: return "Pose le téléphone au bout de la ligne, bien calé, puis appuie sur « Calibrer et commencer ». Tu auras 3 s pour lâcher le téléphone."
+        case .decompte(let n): return "Ne touche plus le téléphone… \(n)"
+        case .recherche: return "Recherche de la ligne dans l'axe…"
+        case .echec(let m): return "Ligne non trouvée avec certitude : \(m). Réessaie, ou trace la ligne à la main."
+        case .pointProche: return "Touche le bout PROCHE de la ligne. (Le téléphone peut bouger un peu : la ligne sera remesurée après un décompte.)"
         case .pointLointain: return "Touche maintenant le bout LOINTAIN de la même ligne."
-        case .cote: return "De quel côté de la ligne la balle est-elle faute ?"
-        case .recherche: return "Recherche des bords de la ligne…"
-        case .echec(let m): return "Ligne non trouvée avec certitude : \(m). Touche à nouveau le bout proche."
-        case .pret(let q): return "Ligne trouvée (\(q)). Vérifie les traits roses sur les bords, puis commence."
-        case .jeu: return moteur.mode == .arbitre ? "Arbitrage en cours : flash et « Faute ! » sur les fautes nettes." :
-            "Mode silencieux : l'appli note ses verdicts sans signal."
-        case .bouge(let m): return "Arrêt : le téléphone a bougé (\(m)). Recalibre la ligne."
+        case .jeu:
+            let base = moteur.mode == .arbitre ? "Arbitrage en cours : flash sur les fautes nettes." :
+                "Mode silencieux : l'appli note ses verdicts sans signal."
+            return "Ligne trouvée (\(moteur.qualite)). Vérifie les traits roses sur les bords. " + base
+        case .bouge(let m): return "Arrêt : le téléphone a bougé (\(m)). Recalibre."
         }
     }
 
@@ -128,32 +130,46 @@ struct VueDirect: View {
         .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
     }
 
+    var choixMode: some View {
+        Picker("Mode", selection: Binding(get: { moteur.mode }, set: { moteur.changerMode($0) })) {
+            ForEach(Moteur.Mode.allCases) { Text($0.rawValue).tag($0) }
+        }.pickerStyle(.segmented)
+    }
+
     @ViewBuilder var commandes: some View {
         switch moteur.etape {
-        case .cote:
-            HStack {
-                Button("Faute à gauche") { moteur.choisirCote(.gauche) }.buttonStyle(.borderedProminent)
-                Button("Faute à droite") { moteur.choisirCote(.droite) }.buttonStyle(.borderedProminent)
-            }
-        case .pret:
-            VStack {
-                Picker("Mode", selection: Binding(get: { moteur.mode }, set: { moteur.changerMode($0) })) {
-                    ForEach(Moteur.Mode.allCases) { Text($0.rawValue).tag($0) }
+        case .reglage, .echec, .bouge:
+            VStack(spacing: 10) {
+                Picker("Côté faute", selection: $moteur.coteFaute) {
+                    Text("Faute à gauche").tag(CoteFaute.gauche)
+                    Text("Faute à droite").tag(CoteFaute.droite)
                 }.pickerStyle(.segmented)
+                choixMode
                 HStack {
-                    Button("Recalibrer") { moteur.recommencer() }.buttonStyle(.bordered)
-                    Button("Commencer") { moteur.commencer() }.buttonStyle(.borderedProminent)
+                    Text(String(format: "Flash : %.1f s", moteur.dureeFlash)).foregroundStyle(.white).font(.footnote)
+                    Slider(value: $moteur.dureeFlash, in: 0.5...3, step: 0.5)
+                    Button("Essai") { moteur.essaiFlash() }.buttonStyle(.bordered).tint(.white)
                 }
+                Button("Calibrer et commencer") { moteur.calibrerEtCommencer() }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                if case .reglage = moteur.etape {} else {
+                    Button("Tracer la ligne à la main") { moteur.traceManuel() }.buttonStyle(.bordered).tint(.white)
+                }
+            }
+            .padding(10)
+            .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+        case .decompte(let n):
+            VStack {
+                Text("\(n)").font(.system(size: 96, weight: .heavy)).foregroundStyle(.white)
+                Button("Annuler") { moteur.annulerDecompte() }.buttonStyle(.bordered).tint(.white)
             }
         case .jeu:
             VStack {
-                Picker("Mode", selection: Binding(get: { moteur.mode }, set: { moteur.changerMode($0) })) {
-                    ForEach(Moteur.Mode.allCases) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented)
+                choixMode
                 Button("Arrêter") { moteur.arreterJeu() }.buttonStyle(.bordered).tint(.white)
             }
-        case .bouge, .echec, .pointLointain:
-            Button("Recommencer") { moteur.recommencer() }.buttonStyle(.bordered).tint(.white)
+        case .pointProche, .pointLointain:
+            Button("Annuler") { moteur.annulerDecompte() }.buttonStyle(.bordered).tint(.white)
         default:
             EmptyView()
         }

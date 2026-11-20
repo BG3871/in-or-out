@@ -8,12 +8,12 @@ final class Moteur: ObservableObject {
     enum Etape: Equatable {
         case demarrage
         case erreur(String)
-        case pointProche                       // toucher le bout proche de la ligne
-        case pointLointain                     // toucher le bout lointain
-        case cote                              // choisir le côté faute
+        case reglage                           // choisir côté faute et mode, puis « Calibrer et commencer »
+        case decompte(Int)                     // mains libres : 3, 2, 1
         case recherche                         // calibrage en cours
         case echec(String)                     // ligne pas trouvée avec certitude
-        case pret(qualite: String)             // ligne trouvée, prêt à juger
+        case pointProche                       // secours : toucher le bout proche de la ligne
+        case pointLointain                     // secours : toucher le bout lointain
         case jeu
         case bouge(String)                     // le téléphone a bougé : on arrête de juger
     }
@@ -24,11 +24,18 @@ final class Moteur: ObservableObject {
         var id: String { rawValue }
     }
 
+    private let prefs = UserDefaults.standard
     @Published var etape: Etape = .demarrage
-    @Published var mode: Mode = .silencieux
+    @Published var mode: Mode { didSet { prefs.set(mode.rawValue, forKey: "mode") } }
+    @Published var coteFaute: CoteFaute { didSet { prefs.set(coteFaute.rawValue, forKey: "coteFaute") } }
+    /// Durée d'allumage de la lampe sur une faute (s).
+    @Published var dureeFlash: Double {
+        didSet { prefs.set(dureeFlash, forKey: "dureeFlash"); let d = dureeFlash; camera.fileAnalyse.async { self.dureeFlashFile = d } }
+    }
     @Published var ligne: LigneAxe?
-    @Published var proche: CGPoint?        // en pixels du portrait 1080 × 1920
+    @Published var proche: CGPoint?        // en pixels du portrait 1080 × 1920 (calibrage de secours)
     @Published var lointain: CGPoint?
+    @Published var qualite = ""
     @Published private(set) var dernierAppel: Appel?
     @Published private(set) var imagesParSeconde: Double = 0
     @Published private(set) var compte = (bonnes: 0, fautes: 0, douteuses: 0)
@@ -51,17 +58,25 @@ final class Moteur: ObservableObject {
     nonisolated(unsafe) private var verifEnCours = false
     nonisolated(unsafe) private var echecsVerif = 0
     nonisolated(unsafe) private var modeArbitre = false
+    nonisolated(unsafe) private var dureeFlashFile = 1.5
     private var debutSeance = Date()
+    private var tacheDecompte: Task<Void, Never>?
 
     init(journal: Journal) {
         self.journal = journal
+        let ud = UserDefaults.standard
+        mode = Mode(rawValue: ud.string(forKey: "mode") ?? "") ?? .silencieux
+        coteFaute = CoteFaute(rawValue: ud.string(forKey: "coteFaute") ?? "") ?? .droite
+        let d = ud.double(forKey: "dureeFlash")
+        dureeFlash = d > 0 ? d : 1.5
+        dureeFlashFile = dureeFlash
         camera.surImage = { [unowned self] sb in self.image(sb) }
     }
 
     func demarrer() async {
         do {
             try await camera.demarrer()
-            etape = .pointProche
+            etape = .reglage
             Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.imagesParSeconde = self?.camera.imagesParSeconde ?? 0 }
             }
@@ -70,45 +85,69 @@ final class Moteur: ObservableObject {
         }
     }
 
-    // MARK: - calibrage
+    // MARK: - calibrage mains libres
 
-    func toucher(_ p: CGPoint) {
-        switch etape {
-        case .pointProche, .echec, .pret, .bouge:
-            proche = p; lointain = nil; ligne = nil; etape = .pointLointain
-        case .pointLointain:
-            lointain = p; etape = .cote
-        default: break
-        }
-    }
-
-    func recommencer() {
+    /// Un seul appui : décompte de 3 s (le temps de lâcher le téléphone), recherche automatique
+    /// de la ligne dans l'axe, puis début du jugement si la ligne est trouvée avec certitude.
+    /// Avec des points touchés (secours), ils servent de guide au lieu de la recherche automatique.
+    func calibrerEtCommencer(avecPoints: Bool = false) {
         arreterJeu()
-        proche = nil; lointain = nil; ligne = nil
-        etape = .pointProche
-    }
-
-    func choisirCote(_ cote: CoteFaute) {
-        guard let p = proche, let l = lointain else { return }
-        etape = .recherche
-        // 5 images espacées de 0,2 s, dont on prend la médiane (les joueurs et balles disparaissent)
-        collecterFonds(5, intervalle: 0.2) { [weak self] fonds in
-            let g = Plan8.mediane(fonds.map { $0.0 }), s = Plan8.mediane(fonds.map { $0.1 })
-            let r = Calibrage.reperer(gris: g, sat: s, proche: (Double(p.x), Double(p.y)),
-                                      lointain: (Double(l.x), Double(l.y)), coteFaute: cote)
-            Task { @MainActor in
-                guard let self else { return }
-                switch r {
-                case .ok(let lg, let q): self.ligne = lg; self.etape = .pret(qualite: q)
-                case .echec(let m): self.etape = .echec(m)
+        ligne = nil
+        if !avecPoints { proche = nil; lointain = nil }
+        let p = proche, l = lointain, cote = coteFaute
+        tacheDecompte?.cancel()
+        tacheDecompte = Task {
+            for n in stride(from: 3, through: 1, by: -1) {
+                etape = .decompte(n)
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+            }
+            etape = .recherche
+            // 5 images espacées de 0,2 s, dont on prend la médiane (les joueurs et balles disparaissent)
+            collecterFonds(5, intervalle: 0.2) { [weak self] fonds in
+                let g = Plan8.mediane(fonds.map { $0.0 }), s = Plan8.mediane(fonds.map { $0.1 })
+                let r: ResultatCalibrage
+                if let p, let l {
+                    r = Calibrage.reperer(gris: g, sat: s, proche: (Double(p.x), Double(p.y)),
+                                          lointain: (Double(l.x), Double(l.y)), coteFaute: cote)
+                } else {
+                    r = Calibrage.detecter(gris: g, sat: s, coteFaute: cote)
+                }
+                Task { @MainActor in
+                    guard let self else { return }
+                    switch r {
+                    case .ok(let lg, let q): self.ligne = lg; self.qualite = q; self.commencer()
+                    case .echec(let m): self.etape = .echec(m)
+                    }
                 }
             }
         }
     }
 
+    func annulerDecompte() {
+        tacheDecompte?.cancel()
+        etape = .reglage
+    }
+
+    /// Secours si la recherche automatique échoue : toucher les deux bouts de la ligne,
+    /// puis le décompte repart et la ligne est mesurée sur des images prises après.
+    func traceManuel() {
+        arreterJeu()
+        proche = nil; lointain = nil; ligne = nil
+        etape = .pointProche
+    }
+
+    func toucher(_ p: CGPoint) {
+        switch etape {
+        case .pointProche: proche = p; lointain = nil; etape = .pointLointain
+        case .pointLointain: lointain = p; calibrerEtCommencer(avecPoints: true)
+        default: break
+        }
+    }
+
     // MARK: - jeu
 
-    func commencer() {
+    private func commencer() {
         guard let lg = ligne else { return }
         camera.bloquerMiseAuPoint(true)
         let modeA = mode == .arbitre
@@ -134,8 +173,11 @@ final class Moteur: ObservableObject {
     func arreterJeu() {
         camera.bloquerMiseAuPoint(false)
         camera.fileAnalyse.async { self.detecteur = nil; self.juge = nil }
-        if etape == .jeu { etape = .pret(qualite: "séance arrêtée") }
+        if etape == .jeu { etape = .reglage }
     }
+
+    /// Essai de la lampe depuis l'écran de réglage.
+    func essaiFlash() { camera.flash(duree: dureeFlash) }
 
     // MARK: - file d'analyse
 
@@ -223,7 +265,7 @@ final class Moteur: ObservableObject {
 
     nonisolated private func appel(_ a: Appel) {
         if a.verdict == .faute && modeArbitre {
-            camera.flash()
+            camera.flash(duree: dureeFlashFile)
             Task { @MainActor in self.annonce.faute() }
         }
         let nom = "\(Int(Date().timeIntervalSince1970))_\(a.verdict.rawValue)"

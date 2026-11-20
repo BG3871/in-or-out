@@ -75,7 +75,8 @@ final class Rejeu: ObservableObject {
             plans = (Plan8.mediane(gs), Plan8.mediane(ss))
             fond = apercu.map { UIImage(cgImage: $0) }
             proche = nil; lointain = nil; ligne = nil
-            etape = .pointProche
+            // d'abord le côté faute, puis recherche automatique de la ligne (sans toucher l'image)
+            etape = .cote
         } catch {
             etape = .erreur(error.localizedDescription)
         }
@@ -108,9 +109,15 @@ final class Rejeu: ObservableObject {
     }
 
     func choisirCote(_ c: CoteFaute) {
-        guard let pl = plans, let p = proche, let l = lointain else { return }
-        switch Calibrage.reperer(gris: pl.0, sat: pl.1, proche: (Double(p.x), Double(p.y)),
-                                 lointain: (Double(l.x), Double(l.y)), coteFaute: c) {
+        guard let pl = plans else { return }
+        let r: ResultatCalibrage
+        if let p = proche, let l = lointain {
+            r = Calibrage.reperer(gris: pl.0, sat: pl.1, proche: (Double(p.x), Double(p.y)),
+                                  lointain: (Double(l.x), Double(l.y)), coteFaute: c)
+        } else {
+            r = Calibrage.detecter(gris: pl.0, sat: pl.1, coteFaute: c)
+        }
+        switch r {
         case .ok(let lg, let q): ligne = lg; etape = .pret(q)
         case .echec(let m): etape = .echec(m)
         }
@@ -252,7 +259,7 @@ struct VueRejeu: View {
         case .pointProche: return "Touche le bout PROCHE de la ligne dans l'axe."
         case .pointLointain: return "Touche le bout LOINTAIN de la même ligne."
         case .cote: return "De quel côté la balle est-elle faute ?"
-        case .echec(let m): return "Ligne non trouvée avec certitude : \(m). Touche à nouveau le bout proche."
+        case .echec(let m): return "Ligne non trouvée avec certitude : \(m). Touche le bout proche de la ligne pour la tracer à la main."
         case .pret(let q): return "\(rejeu.nomVideo) : ligne trouvée (\(q))."
         case .analyse: return "Analyse de \(rejeu.nomVideo)… compte environ la durée de la vidéo."
         case .fini(let m): return m

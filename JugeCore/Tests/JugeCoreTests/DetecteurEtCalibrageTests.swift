@@ -5,9 +5,9 @@ import XCTest
 final class CalibrageTests: XCTestCase {
     func plan(_ stem: String, _ nom: String) throws -> Plan8 {
         let dir = Bundle.module.url(forResource: "Fixtures", withExtension: nil)!
-        let crop = try Data(contentsOf: dir.appendingPathComponent("\(stem)_\(nom)_900_1500.u8"))
+        let crop = try Data(contentsOf: dir.appendingPathComponent("\(stem)_\(nom)_900_1920.u8"))
         var px = [UInt8](repeating: 0, count: 1080 * 1920)
-        px.replaceSubrange((900 * 1080)..<(1500 * 1080), with: crop)
+        px.replaceSubrange((900 * 1080)..<(1920 * 1080), with: crop)
         return Plan8(largeur: 1080, hauteur: 1920, pixels: px)
     }
 
@@ -32,6 +32,25 @@ final class CalibrageTests: XCTestCase {
             XCTAssertEqual(Double(l.y0), Double(y0), accuracy: 15)
             XCTAssertEqual(Double(l.y1), Double(y1), accuracy: 15)
             XCTAssertEqual(try XCTUnwrap(Calibrage.decalage(l, gris: try plan(stem, "gris"), sat: try plan(stem, "sat"))), 0, accuracy: 0.5)
+        }
+    }
+
+    /// Sans aucun toucher : la ligne dans l'axe est trouvée seule, aux mêmes bords que le script.
+    func testDetectionAutomatique() throws {
+        let attendu: [String: ([Double], [Double])] = [
+            "IMG_1299": ([-0.2786640825263625, 905.1752265486193], [-0.1815367010629184, 798.8997228932328]),
+            "IMG_1323": ([-0.22295355224187474, 751.3618021332446], [-0.1259978579936452, 653.8503103386265]),
+        ]
+        for (stem, (g, d)) in attendu {
+            let debut = Date()
+            let r = Calibrage.detecter(gris: try plan(stem, "gris"), sat: try plan(stem, "sat"), coteFaute: .droite)
+            print(stem, "détection auto en", Date().timeIntervalSince(debut), "s")
+            guard case .ok(let l, let q) = r else { return XCTFail("\(stem) : \(r)") }
+            print(stem, q, l)
+            for y in [Double(l.y0), Double(l.y1)] {
+                XCTAssertEqual(Maths.polyval(l.gauche, y), Maths.polyval(g, y), accuracy: 0.5, "\(stem) bord gauche à y=\(y)")
+                XCTAssertEqual(Maths.polyval(l.droite, y), Maths.polyval(d, y), accuracy: 0.5, "\(stem) bord droit à y=\(y)")
+            }
         }
     }
 

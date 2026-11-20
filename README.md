@@ -21,12 +21,16 @@ ramassées sont ignorés, comme dans le script.
 
 ## Utilisation
 
-1. **Direct** : poser le téléphone au bout de la ligne, toucher le bout proche puis le bout lointain de la ligne,
-   choisir le côté faute. L'appli cherche les deux bords de la ligne et **refuse de juger si elle n'est pas sûre**.
-   Vérifier les traits roses, choisir le mode puis « Commencer ».
+1. **Direct** : poser le téléphone au bout de la ligne, choisir le côté faute et le mode, puis appuyer sur
+   **« Calibrer et commencer »** et lâcher le téléphone. Après un décompte de 3 s, l'appli trouve seule la ligne dans
+   l'axe (la plus longue ligne fuyante qui arrive au pied du téléphone, comme le script) et commence à juger.
+   Elle **refuse de juger si elle n'est pas sûre** (deux lignes candidates, bords irréguliers) ; on peut alors réessayer
+   ou tracer la ligne à la main (deux touchers, puis nouveau décompte : la ligne est remesurée sur des images prises
+   après les touchers, donc un léger mouvement du téléphone ne compte pas).
    - **Silencieux** (par défaut) : l'appli note ses verdicts sans signal. À utiliser tant que la concordance
      avec tes annotations n'est pas jugée suffisante.
-   - **Arbitre** : flash et « Faute ! » sur les fautes nettes.
+   - **Arbitre** : flash (1,5 s par défaut, réglable de 0,5 à 3 s, bouton « Essai ») et « Faute ! » sur les fautes nettes.
+     Le son suit la sortie audio de l'iPhone : une enceinte Bluetooth connectée le reçoit.
    - Toutes les 3 s, l'appli vérifie que la ligne n'a pas bougé. Si le téléphone a bougé (plus de 4 px),
      elle s'arrête et demande de recalibrer.
 2. **Rejeu** : choisir une vidéo au ralenti déjà filmée (IMG_1299, IMG_1323…). Même détecteur et même juge que le direct.
@@ -56,7 +60,7 @@ arrive dans TestFlight sur l'iPhone 10 à 30 minutes après.
   - les 12 balles annotées (10 sur IMG_1323, 2 sur IMG_1299) : aucune balle bonne jugée faute, les 4 fautes annoncées ;
   - le juge en direct annonce les mêmes rebonds que l'analyse complète, moins de 0,25 s après le rebond ;
   - balle masquée 30 ms au contact retrouvée par extrapolation ;
-  - bords de ligne retrouvés à moins d'un demi-pixel de ceux du script.
+  - bords de ligne retrouvés à moins d'un demi-pixel de ceux du script, avec ou sans touchers (détection automatique).
 - `App/` : l'appli SwiftUI (caméra, lampe, voix, extraits, journal, rejeu). Le projet Xcode est généré par
   [XcodeGen](https://github.com/yonaskolb/XcodeGen) à partir de `project.yml`.
 - Workflows : « Tests du cœur » (Linux) et « Compilation iOS » (Mac, sans signature) à chaque envoi ;
